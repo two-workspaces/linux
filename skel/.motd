@@ -1,0 +1,10 @@
+
+  Linux server (Ubuntu 24.04)
+  ---------------------------
+  apt install X   survives redeploys: saved to the volume and reinstalled on boot
+  svc             keep a program running: svc add web -- python3 -m http.server 8080
+  port 8080       whatever listens here is served at this service's Railway domain
+  crontab -e      scheduled jobs, persisted
+  ~/ and /srv     on the volume; everything else outside them resets on redeploy
+  tmux            this shell runs in session "main"; it survives closed tabs and dropped SSH
+

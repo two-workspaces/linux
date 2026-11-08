@@ -1,0 +1,87 @@
+#!/bin/bash
+# svc: keep programs running on this server. Each service is a script and a
+# supervisor entry under /data/linux/services, so it survives redeploys.
+set -euo pipefail
+D=/data/linux/services
+L=/data/linux/logs
+ctl() { supervisorctl -c /etc/supervisor/supervisord.conf "$@"; }
+
+usage() {
+  cat <<EOF
+svc add NAME [--dir DIR] -- COMMAND...   run COMMAND as service NAME, now and after every restart
+svc ls                                   list services and their state
+svc logs NAME [-f]                       show (or follow) a service's output
+svc restart|stop|start NAME              control a service
+svc edit NAME                            edit the service's script, then restart it
+svc rm NAME                              stop and delete a service
+
+Whatever listens on port ${APP_PORT:-8080} is served at this service's Railway domain.
+Example:  svc add web --dir /srv/site -- python3 -m http.server 8080
+EOF
+}
+
+name_ok() {
+  [[ "$1" =~ ^[a-z0-9][a-z0-9_-]{0,39}$ ]] || { echo "service names use a-z, 0-9, - and _" >&2; exit 2; }
+  [[ "$1" == sys-* ]] && { echo "names starting with sys- are reserved" >&2; exit 2; }
+  return 0
+}
+exists() { [ -f "$D/$1.conf" ] || { echo "no service named $1 (svc ls)" >&2; exit 1; }; }
+
+cmd=${1:-help}; shift || true
+case "$cmd" in
+  add)
+    n=${1:-}; [ -n "$n" ] || { usage; exit 2; }; shift; name_ok "$n"
+    [ -f "$D/$n.conf" ] && { echo "$n already exists; use svc edit $n or svc rm $n" >&2; exit 1; }
+    dir=/root
+    if [ "${1:-}" = "--dir" ]; then dir=$2; shift 2; fi
+    [ "${1:-}" = "--" ] && shift
+    [ $# -gt 0 ] || { echo "missing command: svc add $n -- COMMAND..." >&2; exit 2; }
+    mkdir -p "$D" "$L" "$dir"
+    {
+      echo "#!/bin/bash"
+      echo "# Service \"$n\". Edit, then run: svc restart $n"
+      printf 'cd %q\n' "$dir"
+      printf 'exec'; printf ' %q' "$@"; printf '\n'
+    } > "$D/$n.sh"
+    cat > "$D/$n.conf" <<CFG
+[program:$n]
+command=/usr/local/lib/linux/svc-run $D/$n.sh
+autostart=true
+autorestart=true
+startsecs=3
+startretries=10
+stopasgroup=true
+killasgroup=true
+redirect_stderr=true
+stdout_logfile=$L/$n.log
+stdout_logfile_maxbytes=10MB
+stdout_logfile_backups=2
+CFG
+    ctl reread >/dev/null && ctl update "$n" >/dev/null
+    echo "added $n; it restarts on crash and after every redeploy. Logs: svc logs $n"
+    ;;
+  ls|list|status)
+    # supervisorctl status exits non-zero whenever anything isn't RUNNING.
+    out=$(ctl status 2>/dev/null | grep -v '^sys-' || true)
+    if [ -n "$out" ]; then echo "$out"; else echo "no services yet. Add one: svc add web -- python3 -m http.server ${APP_PORT:-8080}"; fi
+    ;;
+  logs)
+    n=${1:?svc logs NAME}; exists "$n"
+    if [ "${2:-}" = "-f" ]; then exec tail -n 100 -F "$L/$n.log"; else tail -n 100 "$L/$n.log" 2>/dev/null || true; fi
+    ;;
+  restart|stop|start)
+    n=${1:?svc $cmd NAME}; exists "$n"; ctl "$cmd" "$n"
+    ;;
+  edit)
+    n=${1:?svc edit NAME}; exists "$n"; "${EDITOR:-vim}" "$D/$n.sh"; ctl restart "$n"
+    ;;
+  rm|remove)
+    n=${1:?svc rm NAME}; exists "$n"
+    ctl stop "$n" >/dev/null 2>&1 || true
+    rm -f "$D/$n.conf" "$D/$n.sh"
+    ctl reread >/dev/null && ctl update >/dev/null
+    echo "removed $n (its log stays in $L/$n.log)"
+    ;;
+  help|-h|--help) usage ;;
+  *) usage; exit 2 ;;
+esac

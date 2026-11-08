@@ -1,0 +1,29 @@
+#!/bin/bash
+# Boot step: reinstall the apt packages saved on the volume, then mark the box
+# ready so the user's services start. Runs after the web terminal and sshd are
+# already up, so a slow reinstall never fails Railway's healthcheck.
+s=/data/linux
+log="$s/logs/restore.log"
+{
+  echo "== restore $(date -u +%FT%TZ)"
+  for d in /etc/apt/sources.list.d /etc/apt/keyrings /etc/apt/trusted.gpg.d /usr/share/keyrings; do
+    [ -d "$s/apt$d" ] && mkdir -p "$d" && cp -a "$s/apt$d/." "$d/"
+  done
+  want=()
+  if [ -s "$s/packages.txt" ]; then
+    mapfile -t want < <(dpkg-query -W -f='${Package}\n' 2>/dev/null | sort -u | comm -13 - <(sort -u "$s/packages.txt"))
+  fi
+  if [ ${#want[@]} -gt 0 ]; then
+    echo "reinstalling ${#want[@]} package(s): ${want[*]}"
+    export LINUX_RESTORING=1
+    apt-get update -q || echo "apt-get update failed"
+    if ! apt-get install -y -q "${want[@]}"; then
+      for p in "${want[@]}"; do apt-get install -y -q "$p" || echo "could not reinstall $p"; done
+    fi
+    rm -rf /var/lib/apt/lists/*
+  else
+    echo "no saved packages to reinstall"
+  fi
+  touch /run/linux/ready
+  echo "== ready: starting services"
+} 2>&1 | tee -a "$log"

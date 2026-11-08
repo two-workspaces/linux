@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Linux server</title>
+<style>
+  :root { color-scheme: light dark; --bg: #fafaf9; --fg: #1c1917; --muted: #57534e; --code: #f0efed; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #161514; --fg: #e7e5e4; --muted: #a8a29e; --code: #262422; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 system-ui, sans-serif; }
+  main { max-width: 38rem; margin: 12vh auto; padding: 0 16px; }
+  h1 { font-size: 1.5rem; margin: 0 0 .5rem; }
+  p { color: var(--muted); }
+  pre { background: var(--code); padding: .9rem 1rem; border-radius: 6px; overflow-x: auto; font-size: .9rem; }
+  a { color: inherit; }
+</style>
+</head>
+<body>
+<main>
+  <h1>This Linux server is running</h1>
+  <p>Nothing is listening on the app port yet (<code>APP_PORT</code>, 8080 by default). Open the
+     <a href="/terminal/">web terminal</a> or SSH in, and start something there:</p>
+  <pre>svc add web -- python3 -m http.server 8080</pre>
+  <p>It will appear on this address, and it keeps running after crashes and redeploys.</p>
+</main>
+</body>
+</html>

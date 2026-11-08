@@ -1,0 +1,6 @@
+#!/bin/bash
+# Starts one user service: waits until saved packages are back, then runs its
+# script with a login shell, so PATH and the Railway variables are set.
+while [ ! -f /run/linux/ready ]; do sleep 1; done
+cd /root
+exec /bin/bash -l "$1"

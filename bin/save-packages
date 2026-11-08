@@ -1,0 +1,16 @@
+#!/bin/bash
+# apt hook (DPkg::Post-Invoke): save the packages the user added on top of the
+# image, and the apt sources and keys they came from, so restore can put them
+# back after a redeploy. Skipped while restore itself runs: a package that
+# failed to reinstall must not drop out of the list.
+[ -n "${LINUX_RESTORING:-}" ] && exit 0
+[ -d /data/linux ] || exit 0
+s=/data/linux
+apt-mark showmanual 2>/dev/null | sort -u | comm -13 /opt/linux/base-packages.txt - > "$s/packages.txt.tmp" \
+  && mv "$s/packages.txt.tmp" "$s/packages.txt"
+for d in /etc/apt/sources.list.d /etc/apt/keyrings /etc/apt/trusted.gpg.d /usr/share/keyrings; do
+  [ -d "$d" ] || continue
+  t="$s/apt$d"
+  rm -rf "$t" && mkdir -p "$t" && cp -a "$d/." "$t/"
+done
+exit 0
